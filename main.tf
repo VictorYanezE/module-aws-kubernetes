@@ -1,3 +1,13 @@
+terraform {
+  required_version = ">= 0.14"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 3.0.0"
+    }
+  }
+}
+
 provider "aws" {
   region = var.aws_region
 }
@@ -30,32 +40,23 @@ resource "aws_iam_role_policy_attachment" "ms-cluster-AmazonEKSClusterPolicy" {
   role       = aws_iam_role.ms-cluster.name
 }
 
-#Network security Policy
 resource "aws_security_group" "ms-cluster" {
   name   = local.cluster_name
   vpc_id = var.vpc_id
 
-  egress = [
-    {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
-      cidr_blocks = ["0.0.0.0/0"]
-      description       = "Allow all outbound traffic"
-      ipv6_cidr_blocks  = []
-      prefix_list_ids   = []
-      security_groups   = []
-      self              = false
-    }
-  ]
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
 
   tags = {
     Name = "ms-up-running"
   }
 }
 
-
-#Cluster definition
 resource "aws_eks_cluster" "ms-up-running" {
   name     = local.cluster_name
   role_arn = aws_iam_role.ms-cluster.arn
@@ -69,7 +70,6 @@ resource "aws_eks_cluster" "ms-up-running" {
   ]
 }
 
-#Node Role 
 resource "aws_iam_role" "ms-node" {
   name = "${local.cluster_name}.node"
 
@@ -89,7 +89,6 @@ resource "aws_iam_role" "ms-node" {
   POLICY
 }
 
-#Node Policy
 resource "aws_iam_role_policy_attachment" "ms-node-AmazonEKSWorkerNodePolicy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
   role       = aws_iam_role.ms-node.name
@@ -105,7 +104,6 @@ resource "aws_iam_role_policy_attachment" "ms-node-ContainerRegistryReadOnly" {
   role       = aws_iam_role.ms-node.name
 }
 
-#Node Group
 resource "aws_eks_node_group" "ms-node-group" {
   cluster_name    = aws_eks_cluster.ms-up-running.name
   node_group_name = "microservices"
@@ -128,34 +126,32 @@ resource "aws_eks_node_group" "ms-node-group" {
   ]
 }
 
-#Create a kubeconfig file based on the cluster that has been created
 resource "local_file" "kubeconfig" {
-  content  = <<KUBECONFIG_END
+  content = <<-KUBECONFIG_END
   apiVersion: v1
   clusters:
   - cluster:
-     "certificate-authority-data: >
-     ${aws_eks_cluster.ms-up-running.certificate_authority.0.data}"
-     server: ${aws_eks_cluster.ms-up-running.endpoint}
+      certificate-authority-data: ${aws_eks_cluster.ms-up-running.certificate_authority.0.data}
+      server: ${aws_eks_cluster.ms-up-running.endpoint}
     name: ${aws_eks_cluster.ms-up-running.arn}
-   contexts:
-   - context:
-      cluster:${aws_eks_cluster.ms-up-running.arn}
+  contexts:
+  - context:
+      cluster: ${aws_eks_cluster.ms-up-running.arn}
       user: ${aws_eks_cluster.ms-up-running.arn}
-     name: ${aws_eks_cluster.ms-up-running.arn}
-    current-context: ${aws_eks_cluster.ms-up-running.arn}
-    kind: Config
-    preferences: {}
-    users:
-    - name:${aws_eks_cluster.ms-up-running.arn}
-      user:
-       exec:
+    name: ${aws_eks_cluster.ms-up-running.arn}
+  current-context: ${aws_eks_cluster.ms-up-running.arn}
+  kind: Config
+  preferences: {}
+  users:
+  - name: ${aws_eks_cluster.ms-up-running.arn}
+    user:
+      exec:
         apiVersion: client.authentication.k8s.io/v1alpha1
         command: aws-iam-authenticator
         args:
-         - "token"
-         - "-i"
-         - "${aws_eks_cluster.ms-up-running.name}"
-       KUBECONFIG_END
+          - "token"
+          - "-i"
+          - "${aws_eks_cluster.ms-up-running.name}"
+  KUBECONFIG_END
   filename = "kubeconfig"
 }
