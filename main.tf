@@ -142,7 +142,7 @@ resource "aws_eks_node_group" "ms-node-group" {
 
 # Create a kubeconfig file based on the cluster that has been created
 resource "local_file" "kubeconfig" {
-  content  = <<KUBECONFIG
+  content  = <<-EOT
 apiVersion: v1
 clusters:
 - cluster:
@@ -167,6 +167,6 @@ users:
         - "token"
         - "-i"
         - "${aws_eks_cluster.ms-up-running.name}"
-    KUBECONFIG
+    EOT
   filename = "kubeconfig"
 }
